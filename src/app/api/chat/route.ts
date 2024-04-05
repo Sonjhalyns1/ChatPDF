@@ -2,7 +2,7 @@ import {Configuration, OpenAIApi} from "openai-edge"
 import {Message, OpenAIStream, StreamingTextResponse} from "ai"
 import { db } from "@/lib/db"
 import { eq } from "drizzle-orm"
-import { chats } from "@/lib/db/schema"
+import { chats, messages as _messages } from "@/lib/db/schema"
 import { NextResponse } from "next/server"
 import { getContext } from "@/lib/context"
 
@@ -49,7 +49,22 @@ export async function POST(req: Request) {
             ],
             stream: true
         })
-        const stream = OpenAIStream(response)
+        const stream = OpenAIStream(response, {
+            onStart: async () => {
+                await db.insert(_messages).values({
+                    chatId,
+                    content: lastMessage.content,
+                    role: "system"
+                })
+            },
+            onCompletion: async (completion) => {
+                await db.insert(_messages).values({
+                    chatId,
+                    content: completion,
+                    role: "system"
+                })
+            }
+        })
         return new StreamingTextResponse(stream)
     } catch (error) {
         
